@@ -33,6 +33,7 @@ class Option:
         self.delta = None
         self.gamma = None
         self.theta = None
+        self.present_value = None
 
     def __str__(self):
         return self.underlying_pair + " " + str(self.strike) + " " + self.call_put + " with expiry " + str(self.expiry)
@@ -59,17 +60,18 @@ class Option:
         if not time_left:
             time_left = self.time_left
         d1 = (math.log(self.underlying_price / self.strike) + (self.interest_rate + ((self.volatility ** 2) / 2.0))
-                   * time_left) / self.volatility * math.sqrt(time_left)
-        d2 = d1 - self.volatility * math.sqrt(time_left)
+              * time_left) / (self.volatility * math.sqrt(time_left))
+        d2 = d1 - (self.volatility * math.sqrt(time_left))
         present_value = self.strike * math.exp(-self.interest_rate * time_left)
         if self.call_put == "call":
-            theo = (self.underlying_price * norm.cdf(d1)) - (present_value * norm.cdf(d2))
+            theo = max((self.underlying_price * norm.cdf(d1)) - (present_value * norm.cdf(d2)), 0)
         elif self.call_put == "put":
-            theo = (norm.cdf(-d2) * present_value) - (norm.cdf(-d1) * self.underlying_price)
+            theo = max((norm.cdf(-d2) * present_value) - (norm.cdf(-d1) * self.underlying_price), 0)
         if store:
             self.d1 = d1
             self.d2 = d2
             self.theo = theo
+            self.present_value = present_value
         return theo
 
     def calc_delta(self, underlying_price=None, store=True):
