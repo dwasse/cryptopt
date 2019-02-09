@@ -16,7 +16,7 @@ class Option:
                  interest_rate=0,
                  volatility=None,
                  underlying_price=None,
-                 now=datetime.datetime.now(),
+                 time=datetime.datetime.now(),
                  exchange_symbol=None):
         self.underlying_pair = underlying_pair
         if not option_type == 'call' and not option_type == 'put':
@@ -26,11 +26,11 @@ class Option:
         self.expiry = expiry
         self.interest_rate = interest_rate
         if volatility is not None:
-            self.volatility = volatility        # decimal
+            self.vol = volatility        # decimal
         self.underlying_price = underlying_price
-        self.now = now
+        self.time = time
         self.exchange_symbol = exchange_symbol
-        self.time_left = self.get_time_left(self.now)
+        self.time_left = self.get_time_left(self.time)
         self.d1 = None
         self.d2 = None
         self.theo = None
@@ -38,6 +38,7 @@ class Option:
         self.gamma = None
         self.theta = None
         self.present_value = None
+        self.mid_market = None
 
     def __str__(self):
         return self.underlying_pair + " " + str(self.strike) + " " + self.option_type + " with expiry " + str(self.expiry)
@@ -45,11 +46,17 @@ class Option:
     def get_time_left(self, current_datetime=datetime.datetime.now()):
         return (self.expiry - current_datetime).total_seconds() / (day * 365)
 
-    def update_underlying_price(self, underlying_price):
+    def set_underlying_price(self, underlying_price):
         self.underlying_price = underlying_price
 
-    def update_now(self, new_time):
-        self.now = new_time
+    def set_time(self, time):
+        self.time = time
+
+    def set_vol(self, vol):
+        self.vol = vol
+
+    def set_mid_market(self, mid_market):
+        self.mid_market = mid_market
 
     def calc_greeks(self, verbose=False):
         self.calc_theo()
@@ -63,9 +70,9 @@ class Option:
     def calc_theo(self, time_left=None, store=True):
         if not time_left:
             time_left = self.time_left
-        d1 = (math.log(self.underlying_price / self.strike) + (self.interest_rate + ((self.volatility ** 2) / 2.0))
-              * time_left) / (self.volatility * math.sqrt(time_left))
-        d2 = d1 - (self.volatility * math.sqrt(time_left))
+        d1 = (math.log(self.underlying_price / self.strike) + (self.interest_rate + ((self.vol ** 2) / 2.0))
+              * time_left) / (self.vol * math.sqrt(time_left))
+        d2 = d1 - (self.vol * math.sqrt(time_left))
         present_value = self.strike * math.exp(-self.interest_rate * time_left)
         theo = None
         if self.option_type == "call":
@@ -81,8 +88,8 @@ class Option:
 
     def calc_delta(self, underlying_price=None, store=True):
         if underlying_price:
-            d1 = (math.log(underlying_price / self.strike) + (self.interest_rate + ((self.volatility ** 2) / 2.0))
-                  * self.time_left) / (self.volatility * math.sqrt(self.time_left))
+            d1 = (math.log(underlying_price / self.strike) + (self.interest_rate + ((self.vol ** 2) / 2.0))
+                  * self.time_left) / (self.vol * math.sqrt(self.time_left))
         else:
             d1 = self.d1
         delta = None
@@ -110,3 +117,18 @@ class Option:
         advanced_theo = self.calc_theo(time_left=advanced_time)
         self.theta = -1 * (advanced_theo - original_theo)
         return self.theta
+
+    # Price in BTC
+    def calc_implied_vol(self, btc_price, num_iterations=100, accuracy=.05, low_vol=0, high_vol=10):
+        usd_price = btc_price * self.underlying_price
+        self.calc_theo()
+        for i in range(num_iterations):
+            if self.theo > usd_price + accuracy:
+                high_vol = self.vol
+            elif self.theo < usd_price - accuracy:
+                low_vol = self.vol
+            else:
+                break
+            self.vol = low_vol + (high_vol - low_vol) / 2.0
+            self.calc_theo()
+        return self.vol

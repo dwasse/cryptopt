@@ -17,7 +17,7 @@ class TheoEngine:
         self.strikes = {e: strikes for e in self.expirations}
         self.atm_volatility = atm_volatility
         self.interest_rate = interest_rate
-        self.now = pytz.timezone('UTC').localize(datetime.datetime.now())
+        self.time = pytz.timezone('UTC').localize(datetime.datetime.now())
         self.options = {
             'call': {},
             'put': {}
@@ -42,10 +42,16 @@ class TheoEngine:
                             interest_rate=0,
                             volatility=self.atm_volatility,
                             underlying_price=self.underlying_price,
-                            now=self.now
+                            time=self.time
                         )
-                        option.calc_greeks(verbose=True)
+                        option.calc_greeks()
                         self.options[option_type][expiry][strike] = option
+
+    def iterate_options(self):
+        for option_type in self.options:
+            for expiry in self.options[option_type]:
+                for strike in self.options[option_type][expiry]:
+                    yield self.options[option_type][expiry][strike]
 
     def build_deribit_options(self):
         self.setup_client()
@@ -71,15 +77,27 @@ class TheoEngine:
                 interest_rate=0,
                 volatility=self.atm_volatility,
                 underlying_price=self.underlying_price,
-                now=self.now,
+                time=self.time,
                 exchange_symbol=option_info['instrumentName']
             )
-            print("Time left: " + str(option.time_left))
-            option.calc_greeks(verbose=True)
+            option.calc_greeks()
             if expiry in self.options[option_type]:
                 self.options[option_type][expiry][strike] = option
             else:
                 self.options[option_type][expiry] = {strike: option}
+
+    def calc_deribit_implied_vols(self):
+        for option_type in self.options:
+            for expiry in self.options[option_type]:
+                for strike in self.options[option_type][expiry]:
+                    option = self.options[option_type][expiry][strike]
+                    orderbook = self.client.getorderbook(instrument=option.exchange_symbol)
+                    if len(orderbook['bids']) and len(orderbook['asks']):
+                        option.set_mid_market((orderbook['bids'][0]['price'] + orderbook['asks'][0]['price']) / 2)
+                        option.calc_implied_vol(option.mid_market)
+                        print("Calculated IV for " + str(option) + ": " + str(option.vol))
+                    else:
+                        print("No market for " + str(option))
 
     def update_underlying_price(self, underlying_price):
         self.underlying_price = underlying_price
@@ -87,6 +105,6 @@ class TheoEngine:
             for expiry in self.options[option_type]:
                 for strike in self.options[option_type][expiry]:
                     option = self.options[option_type][expiry][strike]
-                    option.update_underlying_price(self.underlying_price)
+                    option.set_underlying_price(self.underlying_price)
                     option.calc_greeks()
 
