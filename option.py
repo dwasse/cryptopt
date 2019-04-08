@@ -37,6 +37,8 @@ class Option:
         self.delta = None
         self.gamma = None
         self.theta = None
+        self.vega = None
+        self.wvega = None
         self.present_value = None
         self.mid_market = None
 
@@ -63,6 +65,7 @@ class Option:
         self.calc_delta()
         self.calc_gamma()
         self.calc_theta()
+        self.calc_vega()
         if verbose:
             print("Calculated greeks for " + str(self) + ": delta=" + str(self.delta) + ", gamma=" + str(self.gamma)
                   + ", theta=" + str(self.theta))
@@ -117,6 +120,20 @@ class Option:
         advanced_theo = self.calc_theo(time_left=advanced_time)
         self.theta = -1 * (advanced_theo - original_theo)
         return self.theta
+
+    def calc_vega(self, vol_change=.01):
+        original_vol = self.vol
+        original_theo = self.theo
+        self.vol = original_vol * (1 + vol_change)
+        new_theo = self.calc_theo(store=False)
+        self.vol = original_vol
+        self.vega = new_theo - original_theo
+        return self.vega
+
+    # Weighted vega = vega / atm_vega
+    def calc_wvega(self, atm_vega):
+        self.wvega = self.calc_vega() / atm_vega
+        return self.wvega
 
     # Price in BTC
     def calc_implied_vol(self, btc_price, num_iterations=100, accuracy=.05, low_vol=0, high_vol=10):
